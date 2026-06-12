@@ -4,6 +4,8 @@
 
 ローカルでは dbt + DuckDB で作成した分析テーブルを、marimo ノートブックから Polars / Altair で可視化します。GitHub Pages では、dbt で事前生成したCSVを marimo WebAssembly 版で読み込み、ブラウザだけでインタラクティブに動かします。
 
+公開版: https://kakeru-o.github.io/tokyo-temperature-tracker/
+
 ## Stack
 
 - marimo
