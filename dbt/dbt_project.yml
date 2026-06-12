@@ -16,7 +16,7 @@ clean-targets:
   - "logs"
 
 vars:
-  processed_jma_tokyo_glob: "../data/processed/jma_tokyo_*.csv"
+  processed_jma_tokyo_glob: "data/processed/jma_tokyo_*.csv"
 
 models:
   tokyo_temperature_tracker:

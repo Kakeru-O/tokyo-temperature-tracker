@@ -3,6 +3,6 @@ tokyo_temperature_tracker:
   outputs:
     dev:
       type: duckdb
-      path: ../tokyo_temperature.duckdb
+      path: tokyo_temperature.duckdb
       schema: main
       threads: 4

@@ -18,7 +18,11 @@ app = marimo.App(width="full")
 @app.cell
 def _():
     import importlib
+    import io
     import sys
+    import urllib.request
+    from datetime import date, timedelta
+    from math import isnan
     from pathlib import Path
 
     repo_root = Path(__file__).resolve().parent
@@ -30,18 +34,122 @@ def _():
     import marimo as mo
     import polars as pl
 
-    import analysis
+    def is_wasm_runtime():
+        app_object = getattr(mo, "app", None)
+        is_wasm = getattr(app_object, "is_wasm", None)
+        if callable(is_wasm):
+            return bool(is_wasm())
+        return False
 
-    analysis = importlib.reload(analysis)
-    SERIES_COLORS = analysis.SERIES_COLORS
-    build_metric_table = analysis.build_metric_table
-    build_timing_table = analysis.build_timing_table
-    day_of_year_to_month_day = analysis.day_of_year_to_month_day
-    difference = analysis.difference
-    format_float = analysis.format_float
-    load_daily_data = analysis.load_daily_data
-    load_metrics = analysis.load_metrics
-    period_slice = analysis.period_slice
+    running_in_wasm = is_wasm_runtime()
+
+    SERIES_COLORS = {
+        "年平均気温": "#1f77b4",
+        "6-8月平均気温": "#ff7f0e",
+        "夏日(最高25℃以上)": "#2ca02c",
+        "真夏日(最高30℃以上)": "#d62728",
+        "猛暑日(最高35℃以上)": "#8c564b",
+        "熱帯夜(最低25℃以上)": "#9467bd",
+        "夏日の初日": "#2ca02c",
+        "真夏日の初日": "#d62728",
+        "熱帯夜の初日": "#9467bd",
+        "夏日の期間": "#2ca02c",
+        "真夏日の期間": "#d62728",
+    }
+
+    def period_slice(df, y0, y1):
+        start_year = min(y0, y1)
+        end_year = max(y0, y1)
+        return df.filter(pl.col("year").is_between(start_year, end_year))
+
+    def format_float(value, digits):
+        return f"{value:.{digits}f}"
+
+    def difference(left, right, digits):
+        return f"{right - left:+.{digits}f}"
+
+    def day_of_year_to_month_day(value):
+        if value is None:
+            return "-"
+        if isinstance(value, float) and isnan(value):
+            return "-"
+        target_date = date(2004, 1, 1) + timedelta(days=int(round(float(value))) - 1)
+        return target_date.strftime("%m/%d")
+
+    def build_metric_table(rows, left_label, right_label):
+        return pl.DataFrame(rows, schema=["指標", left_label, right_label, "差分(後-前)"], orient="row")
+
+    def build_timing_table(rows, left_label, right_label):
+        return pl.DataFrame(
+            rows,
+            schema=[
+                "指標",
+                f"{left_label} (通算日)",
+                f"{left_label} (月日)",
+                f"{right_label} (通算日)",
+                f"{right_label} (月日)",
+                "差分(後-前)",
+            ],
+            orient="row",
+        )
+
+    try:
+        import analysis
+    except ModuleNotFoundError:
+        analysis = None
+        running_in_wasm = True
+
+    if running_in_wasm or analysis is None:
+        def read_pages_csv(path):
+            data = None
+            attempted_urls = []
+            candidate_urls = [
+                path,
+                f"./{path}",
+                f"../{path}",
+                f"/{path}",
+            ]
+            for url in candidate_urls:
+                attempted_urls.append(url)
+                try:
+                    with urllib.request.urlopen(url) as response:
+                        candidate_data = response.read()
+                except Exception:
+                    continue
+
+                if (
+                    candidate_data.lstrip().startswith(b"<!DOCTYPE")
+                    or candidate_data.lstrip().startswith(b"<html")
+                ):
+                    continue
+
+                data = candidate_data
+                break
+
+            if data is None:
+                raise FileNotFoundError(
+                    "Pages 用CSVを取得できませんでした。CSVではなくHTMLが返った可能性があります。試したURL: "
+                    + ", ".join(attempted_urls)
+                )
+
+            return pl.read_csv(io.BytesIO(data), try_parse_dates=True)
+
+        def load_metrics():
+            return read_pages_csv("data/pages/annual_metrics.csv")
+
+        def load_daily_data():
+            return read_pages_csv("data/pages/daily_features.csv")
+    else:
+        analysis = importlib.reload(analysis)
+        SERIES_COLORS = analysis.SERIES_COLORS
+        build_metric_table = analysis.build_metric_table
+        build_timing_table = analysis.build_timing_table
+        day_of_year_to_month_day = analysis.day_of_year_to_month_day
+        difference = analysis.difference
+        format_float = analysis.format_float
+        load_daily_data = analysis.load_daily_data
+        load_metrics = analysis.load_metrics
+        period_slice = analysis.period_slice
     return (
         SERIES_COLORS,
         alt,

@@ -50,84 +50,68 @@ def query_polars(con: duckdb.DuckDBPyConnection, sql: str) -> pl.DataFrame:
 def load_metrics(root: Path | None = None) -> pl.DataFrame:
     base = root or project_root()
     db_path = duckdb_path(base)
-    if db_path.exists():
-        con = duckdb.connect(str(db_path), read_only=True)
-        try:
-            has_table = con.execute(
-                """
-                select 1
-                from information_schema.tables
-                where table_schema = 'mart'
-                  and table_name = 'mart_tokyo_temperature_story_metrics'
-                limit 1
-                """
-            ).fetchone()
-            if has_table:
-                return query_polars(
-                    con,
-                    """
-                    select *
-                    from mart.mart_tokyo_temperature_story_metrics
-                    order by year
-                    """,
-                )
-        finally:
-            con.close()
-    return build_metrics_from_processed(base)
+    if not db_path.exists():
+        raise FileNotFoundError(
+            f"{db_path} が見つかりません。先に `uv run dbt build --project-dir dbt --profiles-dir dbt` を実行してください。"
+        )
+
+    con = duckdb.connect(str(db_path), read_only=True)
+    try:
+        has_table = con.execute(
+            """
+            select 1
+            from information_schema.tables
+            where table_schema = 'mart'
+              and table_name = 'mart_tokyo_temperature_story_metrics'
+            limit 1
+            """
+        ).fetchone()
+        if not has_table:
+            raise RuntimeError(
+                "mart.mart_tokyo_temperature_story_metrics が見つかりません。"
+                "先に `uv run dbt build --project-dir dbt --profiles-dir dbt` を実行してください。"
+            )
+        return query_polars(
+            con,
+            """
+            select *
+            from mart.mart_tokyo_temperature_story_metrics
+            order by year
+            """,
+        )
+    finally:
+        con.close()
 
 
 def load_daily_data(root: Path | None = None) -> pl.DataFrame:
     base = root or project_root()
     db_path = duckdb_path(base)
-    if db_path.exists():
-        con = duckdb.connect(str(db_path), read_only=True)
-        try:
-            has_table = con.execute(
-                """
-                select 1
-                from information_schema.tables
-                where table_schema = 'intermediate'
-                  and table_name = 'int_tokyo_daily_temperature_features'
-                limit 1
-                """
-            ).fetchone()
-            if has_table:
-                return query_polars(
-                    con,
-                    """
-                    select *
-                    from intermediate.int_tokyo_daily_temperature_features
-                    order by observed_date
-                    """,
-                )
-        finally:
-            con.close()
-    
-    # Fallback to CSV
-    source_glob = processed_glob(base)
-    con = duckdb.connect()
+    if not db_path.exists():
+        raise FileNotFoundError(
+            f"{db_path} が見つかりません。先に `uv run dbt build --project-dir dbt --profiles-dir dbt` を実行してください。"
+        )
+
+    con = duckdb.connect(str(db_path), read_only=True)
     try:
+        has_table = con.execute(
+            """
+            select 1
+            from information_schema.tables
+            where table_schema = 'int'
+              and table_name = 'int_tokyo_daily_temperature_features'
+            limit 1
+            """
+        ).fetchone()
+        if not has_table:
+            raise RuntimeError(
+                "int.int_tokyo_daily_temperature_features が見つかりません。"
+                "先に `uv run dbt build --project-dir dbt --profiles-dir dbt` を実行してください。"
+            )
         return query_polars(
             con,
-            f"""
-            select
-                date::date as observed_date,
-                extract(year from date)::int as year,
-                extract(month from date)::int as month,
-                extract(day from date)::int as day,
-                extract(doy from date)::int as dayofyear,
-                avg_temp_c,
-                max_temp_c,
-                min_temp_c,
-                (max_temp_c >= 25) as is_summer_day,
-                (max_temp_c >= 30) as is_midsummer_day,
-                (max_temp_c >= 35) as is_extreme_hot_day,
-                (min_temp_c >= 25) as is_tropical_night
-            from read_csv_auto(
-                '{source_glob}',
-                header=true,
-                union_by_name=true
-            )
+            """
+            select *
+            from int.int_tokyo_daily_temperature_features
             order by observed_date
             """,
         )

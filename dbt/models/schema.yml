@@ -3,47 +3,263 @@ version: 2
 models:
   - name: stg_jma_tokyo_daily_temperature
     description: "気象庁CSVを整形した東京（日別）気温（staging）。"
+    tests:
+      - expression_is_true:
+          expression: "max_temp_c >= min_temp_c"
+      - expression_is_true:
+          expression: "is_summer_day = (max_temp_c >= 25)"
+      - expression_is_true:
+          expression: "is_midsummer_day = (max_temp_c >= 30)"
+      - expression_is_true:
+          expression: "is_extreme_hot_day = (max_temp_c >= 35)"
+      - expression_is_true:
+          expression: "is_tropical_night = (min_temp_c >= 25)"
     columns:
       - name: observed_date
         tests: [not_null, unique]
+      - name: year
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 1900
+              max_value: 2100
+      - name: month
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 1
+              max_value: 12
+      - name: dayofyear
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 1
+              max_value: 366
+      - name: avg_temp_c
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: -30
+              max_value: 50
+      - name: max_temp_c
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: -30
+              max_value: 50
+      - name: min_temp_c
+        tests:
+          - accepted_range:
+              min_value: -30
+              max_value: 50
   - name: int_tokyo_daily_temperature_features
     description: "日別の派生指標と5日移動平均を付与した分析用の中間テーブル。"
+    tests:
+      - expression_is_true:
+          expression: "max_temp_c >= min_temp_c"
+      - expression_is_true:
+          expression: "is_summer_day = (max_temp_c >= 25)"
+      - expression_is_true:
+          expression: "is_midsummer_day = (max_temp_c >= 30)"
+      - expression_is_true:
+          expression: "is_extreme_hot_day = (max_temp_c >= 35)"
+      - expression_is_true:
+          expression: "is_kokusho_day = (max_temp_c >= 40)"
+      - expression_is_true:
+          expression: "is_tropical_night = (min_temp_c >= 25)"
+      - expression_is_true:
+          expression: "rolling_5day_max_temp_c between -30 and 50"
     columns:
       - name: observed_date
         tests: [not_null, unique]
       - name: year
         tests: [not_null]
+      - name: month
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 1
+              max_value: 12
+      - name: dayofyear
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 1
+              max_value: 366
   - name: int_tokyo_annual_temperature
     description: "年ごとの暑さの底上げをまとめた集計テーブル。"
+    tests:
+      - expression_is_true:
+          expression: "annual_mean_max_temp_c >= annual_mean_temp_c"
+      - expression_is_true:
+          expression: "summer_days >= midsummer_days"
+      - expression_is_true:
+          expression: "midsummer_days >= extreme_hot_days"
+      - expression_is_true:
+          expression: "extreme_hot_days >= kokusho_days"
     columns:
       - name: year
         tests: [not_null, unique]
+      - name: annual_mean_temp_c
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: -30
+              max_value: 50
+      - name: summer_mean_temp_c
+        tests:
+          - accepted_range:
+              min_value: -30
+              max_value: 50
+      - name: summer_days
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 0
+              max_value: 366
+      - name: midsummer_days
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 0
+              max_value: 366
+      - name: extreme_hot_days
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 0
+              max_value: 366
+      - name: tropical_nights
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 0
+              max_value: 366
   - name: int_tokyo_summer_timing
     description: "夏の始まり・終わり・期間を年ごとにまとめた集計テーブル。"
+    tests:
+      - expression_is_true:
+          expression: "last_summer_dayofyear >= first_summer_dayofyear"
+      - expression_is_true:
+          expression: "last_midsummer_dayofyear >= first_midsummer_dayofyear"
+      - expression_is_true:
+          expression: "summer_day_span = last_summer_dayofyear - first_summer_dayofyear + 1"
+      - expression_is_true:
+          expression: "midsummer_day_span = last_midsummer_dayofyear - first_midsummer_dayofyear + 1"
     columns:
       - name: year
         tests: [not_null, unique]
+      - name: first_summer_dayofyear
+        tests:
+          - accepted_range:
+              min_value: 1
+              max_value: 366
+      - name: last_summer_dayofyear
+        tests:
+          - accepted_range:
+              min_value: 1
+              max_value: 366
+      - name: summer_day_span
+        tests:
+          - accepted_range:
+              min_value: 1
+              max_value: 366
   - name: int_tokyo_tropical_night_streaks
     description: "年ごとの最長熱帯夜連続日数をまとめた集計テーブル。"
+    tests:
+      - expression_is_true:
+          expression: "longest_tropical_night_streak_end_dayofyear >= longest_tropical_night_streak_start_dayofyear"
+      - expression_is_true:
+          expression: "longest_tropical_night_streak_value = longest_tropical_night_streak_end_dayofyear - longest_tropical_night_streak_start_dayofyear + 1"
     columns:
       - name: year
         tests: [not_null, unique]
+      - name: longest_tropical_night_streak_value
+        tests:
+          - accepted_range:
+              min_value: 1
+              max_value: 366
   - name: mart_tokyo_temperature_story_metrics
     description: "記事・ノートブック向けの年次ストーリー指標をまとめたワイドテーブル。"
+    tests:
+      - expression_is_true:
+          expression: "annual_mean_max_temp_c >= annual_mean_temp_c"
+      - expression_is_true:
+          expression: "summer_days >= midsummer_days"
+      - expression_is_true:
+          expression: "midsummer_days >= extreme_hot_days"
+      - expression_is_true:
+          expression: "summer_day_span = last_summer_dayofyear - first_summer_dayofyear + 1"
     columns:
       - name: year
         tests: [not_null, unique]
+      - name: observed_days
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 1
+              max_value: 366
+      - name: annual_mean_temp_c
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: -30
+              max_value: 50
+      - name: summer_days
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 0
+              max_value: 366
+      - name: extreme_hot_days
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 0
+              max_value: 366
   - name: int_tokyo_monthly_temperature
     description: "日別→月別の集計。"
+    tests:
+      - expression_is_true:
+          expression: "mean_max_temp_c >= mean_avg_temp_c"
+      - expression_is_true:
+          expression: "abs_max_temp_c >= mean_max_temp_c"
+      - expression_is_true:
+          expression: "abs_max_temp_c >= abs_min_temp_c"
     columns:
       - name: month_start
         tests: [not_null, unique]
       - name: year
         tests: [not_null]
       - name: month
-        tests: [not_null]
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 1
+              max_value: 12
+      - name: observed_days
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 28
+              max_value: 31
   - name: mart_tokyo_temperature_anomalies
     description: "1991-2020基準の月別アノマリー（平均/最高/最低）。"
+    tests:
+      - expression_is_true:
+          expression: "mean_max_temp_c >= mean_avg_temp_c"
     columns:
       - name: month_start
         tests: [not_null, unique]
+      - name: month
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 1
+              max_value: 12
+      - name: observed_days
+        tests:
+          - not_null
+          - accepted_range:
+              min_value: 28
+              max_value: 31

@@ -21,12 +21,14 @@ dist/
 __marimo__/
 marimo/_static/
 marimo/_lsp/
+site/
 
 # dbt / DuckDB generated artifacts
 dbt/target/
 dbt/dbt_packages/
 dbt/logs/
 dbt/.user.yml
+data/pages/
 *.duckdb
 *.duckdb.wal
 *.db
