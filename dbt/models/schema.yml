@@ -1,0 +1,49 @@
+version: 2
+
+models:
+  - name: stg_jma_tokyo_daily_temperature
+    description: "気象庁CSVを整形した東京（日別）気温（staging）。"
+    columns:
+      - name: observed_date
+        tests: [not_null, unique]
+  - name: int_tokyo_daily_temperature_features
+    description: "日別の派生指標と5日移動平均を付与した分析用の中間テーブル。"
+    columns:
+      - name: observed_date
+        tests: [not_null, unique]
+      - name: year
+        tests: [not_null]
+  - name: int_tokyo_annual_temperature
+    description: "年ごとの暑さの底上げをまとめた集計テーブル。"
+    columns:
+      - name: year
+        tests: [not_null, unique]
+  - name: int_tokyo_summer_timing
+    description: "夏の始まり・終わり・期間を年ごとにまとめた集計テーブル。"
+    columns:
+      - name: year
+        tests: [not_null, unique]
+  - name: int_tokyo_tropical_night_streaks
+    description: "年ごとの最長熱帯夜連続日数をまとめた集計テーブル。"
+    columns:
+      - name: year
+        tests: [not_null, unique]
+  - name: mart_tokyo_temperature_story_metrics
+    description: "記事・ノートブック向けの年次ストーリー指標をまとめたワイドテーブル。"
+    columns:
+      - name: year
+        tests: [not_null, unique]
+  - name: int_tokyo_monthly_temperature
+    description: "日別→月別の集計。"
+    columns:
+      - name: month_start
+        tests: [not_null, unique]
+      - name: year
+        tests: [not_null]
+      - name: month
+        tests: [not_null]
+  - name: mart_tokyo_temperature_anomalies
+    description: "1991-2020基準の月別アノマリー（平均/最高/最低）。"
+    columns:
+      - name: month_start
+        tests: [not_null, unique]

@@ -1,0 +1,30 @@
+name: tokyo_temperature_tracker
+version: 0.1.0
+profile: tokyo_temperature_tracker
+
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+  - "logs"
+
+vars:
+  processed_jma_tokyo_glob: "../data/processed/jma_tokyo_*.csv"
+
+models:
+  tokyo_temperature_tracker:
+    +materialized: view
+    stg:
+      +schema: stg
+    int:
+      +schema: int
+    mart:
+      +schema: mart
+      +materialized: table
