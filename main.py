@@ -233,9 +233,15 @@ def _(end_year, mo, target_start_year, year_options):
     valid_target_end_options = [
         year for year in year_options if int(year) >= int(target_start_year.value)
     ]
+    default_target_end_year = (
+        "2025" if "2025" in valid_target_end_options else str(end_year)
+    )
+    if default_target_end_year not in valid_target_end_options:
+        default_target_end_year = valid_target_end_options[-1]
+
     target_end_year = mo.ui.dropdown(
         valid_target_end_options,
-        value=str(end_year),
+        value=default_target_end_year,
         label="対象終了年",
     )
 
@@ -430,8 +436,8 @@ def _(
 
         - 期間平均気温: `{annual_mean:.2f}℃`
         - 6-8月平均気温: `{summer_mean:.2f}℃`
-        - 年間猛暑日数の平均: `{extreme_days:.1f}日`
         """
+        #- 年間猛暑日数の平均: `{extreme_days:.1f}日`
     )
 
     overview_panel = mo.vstack(
@@ -577,7 +583,11 @@ def _(
         },
     ]
 
-    year_detail_heading = mo.md(f"## {selected_year}年を掘る")
+    year_detail_heading = mo.md(
+        f"""## {selected_year}年詳細
+        上記グラフの年をクリックすると、その年の日別平均気温の推移を平年の分布とともに確認できます。
+        """
+    )
     year_detail_heading
     return daily_chart_ui, stat_cards
 
@@ -618,7 +628,6 @@ def _(mo):
 
 @app.cell
 def _(
-    SERIES_COLORS,
     alt,
     day_of_year_to_month_day,
     filtered_annual,
@@ -631,28 +640,32 @@ def _(
 ):
     category_specs = {
         "夏日": {
-            "color": SERIES_COLORS["夏日(最高25℃以上)"],
+            "color": "#d6a400",
+            "end_color": "#7f6b1f",
             "count": "summer_days",
             "first": "first_summer_dayofyear",
             "last": "last_summer_dayofyear",
             "span": "summer_day_span",
         },
         "真夏日": {
-            "color": SERIES_COLORS["真夏日(最高30℃以上)"],
+            "color": "#e36f21",
+            "end_color": "#9f4f1a",
             "count": "midsummer_days",
             "first": "first_midsummer_dayofyear",
             "last": "last_midsummer_dayofyear",
             "span": "midsummer_day_span",
         },
         "猛暑日": {
-            "color": SERIES_COLORS["猛暑日(最高35℃以上)"],
+            "color": "#d83a34",
+            "end_color": "#8f1f2b",
             "count": "extreme_hot_days",
             "first": "first_extreme_hot_dayofyear",
             "last": "last_extreme_hot_dayofyear",
             "span": "extreme_hot_span",
         },
         "熱帯夜": {
-            "color": SERIES_COLORS["熱帯夜(最低25℃以上)"],
+            "color": "#7b4ab8",
+            "end_color": "#4d3b8f",
             "count": "tropical_nights",
             "first": "first_tropical_night_dayofyear",
             "last": "last_tropical_night_dayofyear",
@@ -668,6 +681,7 @@ def _(
             "ascending": False,
             "value_kind": "count",
             "chart_group": "日数",
+            "line_style": "日数",
         },
         {
             "label": f"{category}の始まり",
@@ -675,6 +689,7 @@ def _(
             "ascending": True,
             "value_kind": "date",
             "chart_group": "時期",
+            "line_style": "始まり",
         },
         {
             "label": f"{category}の終わり",
@@ -682,6 +697,7 @@ def _(
             "ascending": False,
             "value_kind": "date",
             "chart_group": "時期",
+            "line_style": "終わり",
         },
         {
             "label": f"{category}の期間",
@@ -689,6 +705,7 @@ def _(
             "ascending": False,
             "value_kind": "count",
             "chart_group": "日数",
+            "line_style": "期間",
         },
     ]
     n = int(ranking_top_n.value)
@@ -800,6 +817,7 @@ def _(
                     "value": float(row[spec["metric"]]),
                     "month_day": day_of_year_to_month_day(row[spec["metric"]]),
                     "chart_group": spec["chart_group"],
+                    "line_style": spec["line_style"],
                     "is_top_ranked": int(row["year"]) in ranked_years,
                 }
             )
@@ -807,34 +825,32 @@ def _(
     trend = pl.DataFrame(trend_rows)
     day_trend = trend.filter(pl.col("chart_group") == "日数")
     timing_trend = trend.filter(pl.col("chart_group") == "時期")
-    day_domain = [spec["label"] for spec in ranking_specs if spec["chart_group"] == "日数"]
     timing_domain = [spec["label"] for spec in ranking_specs if spec["chart_group"] == "時期"]
-    day_range = [category_spec["color"], "#5c7896"]
-    timing_range = [category_spec["color"], "#8f6a5a"]
+    timing_range = [category_spec["color"], category_spec["end_color"]]
 
     count_line = (
         alt.Chart(day_trend)
-        .mark_line(opacity=0.78)
+        .mark_line(color=category_spec["color"], opacity=0.82)
         .encode(
             x=alt.X("year:Q", title="年", axis=alt.Axis(format="d")),
             y=alt.Y("value:Q", title="日数"),
-            color=alt.Color(
-                "series:N",
+            strokeDash=alt.StrokeDash(
+                "line_style:N",
                 title="指標",
-                scale=alt.Scale(domain=day_domain, range=day_range),
+                scale=alt.Scale(domain=["日数", "期間"], range=[[], [6, 4]]),
             ),
         )
     )
     count_points = (
         alt.Chart(day_trend)
-        .mark_point(filled=True)
+        .mark_point(color=category_spec["color"], filled=True)
         .encode(
             x=alt.X("year:Q", title="年", axis=alt.Axis(format="d")),
             y=alt.Y("value:Q", title="日数"),
-            color=alt.Color(
-                "series:N",
+            shape=alt.Shape(
+                "line_style:N",
                 title="指標",
-                scale=alt.Scale(domain=day_domain, range=day_range),
+                scale=alt.Scale(domain=["日数", "期間"], range=["circle", "diamond"]),
             ),
             opacity=alt.condition(alt.datum.is_top_ranked, alt.value(1.0), alt.value(0.18)),
             size=alt.condition(alt.datum.is_top_ranked, alt.value(95), alt.value(18)),
@@ -866,6 +882,11 @@ def _(
                 title="指標",
                 scale=alt.Scale(domain=timing_domain, range=timing_range),
             ),
+            strokeDash=alt.StrokeDash(
+                "line_style:N",
+                legend=None,
+                scale=alt.Scale(domain=["始まり", "終わり"], range=[[], [6, 4]]),
+            ),
         )
     )
     timing_points = (
@@ -878,6 +899,11 @@ def _(
                 "series:N",
                 title="指標",
                 scale=alt.Scale(domain=timing_domain, range=timing_range),
+            ),
+            shape=alt.Shape(
+                "line_style:N",
+                legend=None,
+                scale=alt.Scale(domain=["始まり", "終わり"], range=["circle", "diamond"]),
             ),
             opacity=alt.condition(alt.datum.is_top_ranked, alt.value(1.0), alt.value(0.18)),
             size=alt.condition(alt.datum.is_top_ranked, alt.value(95), alt.value(18)),
@@ -927,28 +953,25 @@ def _(timing_chart_ui):
 def _(end_year, mo, start_year, year_options):
     compare_left_start = mo.ui.dropdown(
         year_options,
-        value="1971" if start_year <= 1971 <= end_year else str(start_year),
+        value="1996" if start_year <= 1996 <= end_year else str(start_year),
         label="比較A 開始年",
     )
     compare_right_start = mo.ui.dropdown(
         year_options,
-        value=str(max(start_year, end_year - 9)),
+        value="2016" if start_year <= 2016 <= end_year else str(max(start_year, end_year - 9)),
         label="比較B 開始年",
     )
     return compare_left_start, compare_right_start
 
 
 @app.cell
-def _(compare_left_start, compare_right_start, end_year, mo, year_options):
+def _(compare_left_start, end_year, mo, year_options):
     valid_left_end_options = [
         year for year in year_options if int(year) >= int(compare_left_start.value)
     ]
-    valid_right_end_options = [
-        year for year in year_options if int(year) >= int(compare_right_start.value)
-    ]
     left_end_default = (
-        "1980"
-        if int(compare_left_start.value) <= 1980 <= end_year
+        "2005"
+        if int(compare_left_start.value) <= 2005 <= end_year
         else str(min(int(compare_left_start.value) + 9, end_year))
     )
     compare_left_end = mo.ui.dropdown(
@@ -956,12 +979,35 @@ def _(compare_left_start, compare_right_start, end_year, mo, year_options):
         value=left_end_default,
         label="比較A 終了年",
     )
+    return (compare_left_end,)
+
+
+@app.cell
+def _(compare_right_start, end_year, mo, year_options):
+    valid_right_end_options = [
+        year for year in year_options if int(year) >= int(compare_right_start.value)
+    ]
+    right_end_default = (
+        "2025"
+        if int(compare_right_start.value) <= 2025 <= end_year
+        else str(end_year)
+    )
     compare_right_end = mo.ui.dropdown(
         valid_right_end_options,
-        value=str(end_year),
+        value=right_end_default,
         label="比較B 終了年",
     )
+    return (compare_right_end,)
 
+
+@app.cell
+def _(
+    compare_left_end,
+    compare_left_start,
+    compare_right_end,
+    compare_right_start,
+    mo,
+):
     compare_controls = mo.hstack(
         [
             compare_left_start,
@@ -972,7 +1018,7 @@ def _(compare_left_start, compare_right_start, end_year, mo, year_options):
         gap=2,
         justify="start",
     )
-    return compare_controls, compare_left_end, compare_right_end
+    return (compare_controls,)
 
 
 @app.cell
@@ -1013,31 +1059,31 @@ def _(
             "label": "年平均気温",
             "value": f"{annual_temp_diff:+.2f}℃",
             "caption": f"{left_label} から {right_label} への差",
-            "color": "#31688e",
+            "color": "#2f6f8f",
         },
         {
             "label": "6-8月平均気温",
             "value": f"{summer_temp_diff:+.2f}℃",
             "caption": "夏の平均的な底上げ",
-            "color": "#e07b39",
+            "color": "#e36f21",
         },
         {
             "label": "猛暑日数/年",
             "value": f"{extreme_days_diff:+.1f}日",
             "caption": "年間平均の差",
-            "color": "#8c564b",
+            "color": "#d83a34",
         },
         {
             "label": "夏日期間",
             "value": f"{summer_span_diff:+.0f}日",
             "caption": "中央値の差",
-            "color": "#2ca02c",
+            "color": "#d6a400",
         },
         {
             "label": "夏日の初日",
             "value": f"{first_summer_diff:+.0f}日",
             "caption": "マイナスなら前倒し",
-            "color": "#5d7191",
+            "color": "#7b4ab8",
         },
     ]
 
