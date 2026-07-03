@@ -20,19 +20,39 @@ RAW_COLUMNS = [
 ]
 
 
+def read_raw_csv(path: Path) -> pl.DataFrame:
+    last_error: Exception | None = None
+    for encoding in ("shift_jis", "utf8"):
+        try:
+            return pl.read_csv(
+                path,
+                skip_rows=6,
+                has_header=False,
+                new_columns=RAW_COLUMNS,
+                encoding=encoding,
+            )
+        except UnicodeDecodeError as error:
+            last_error = error
+
+    raise RuntimeError(f"failed to decode raw CSV: {path}") from last_error
+
+
 def load_raw_csv(path: Path) -> pl.DataFrame:
-    numeric_cols = [column for column in RAW_COLUMNS if column != "date"]
+    temperature_cols = ["avg_temp_c", "max_temp_c", "min_temp_c"]
+    metadata_cols = [
+        column
+        for column in RAW_COLUMNS
+        if column not in ["date", *temperature_cols]
+    ]
     return (
-        pl.read_csv(
-            path,
-            skip_rows=6,
-            has_header=False,
-            new_columns=RAW_COLUMNS,
-            encoding="shift_jis",
-        )
+        read_raw_csv(path)
         .with_columns(
             pl.col("date").str.strptime(pl.Date, "%Y/%m/%d"),
-            *[pl.col(column).cast(pl.Float64, strict=False) for column in numeric_cols],
+            *[
+                pl.col(column).cast(pl.Float64, strict=False)
+                for column in temperature_cols
+            ],
+            *[pl.col(column).cast(pl.Int64, strict=False) for column in metadata_cols],
             pl.lit(path.name).alias("source_file"),
         )
     )

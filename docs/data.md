@@ -50,6 +50,7 @@ data/raw/jma_tokyo_1951-1975.csv
 data/raw/jma_tokyo_1976-2000.csv
 data/raw/jma_tokyo_2001-2025.csv
 data/raw/jma_tokyo_20260101-0530.csv
+data/raw/jma_tokyo_20260601-0630.csv
 ```
 
 `data/processed/` にも同じ単位の整形済みCSVがあります。
@@ -79,6 +80,8 @@ data/raw/jma_tokyo_20260101-0530.csv
 ```text
 data/raw/jma_tokyo_20260601-20261231.csv
 ```
+
+気象庁CSVは基本的に CP932 / Shift_JIS 系として扱いますが、取得・保存手順によって UTF-8 化されたCSVになる場合があります。`scripts/prepare_processed_jma.py` は CP932 を優先し、読めない場合は UTF-8 として読み込みます。
 
 ### 2. processed CSV を再生成する
 
