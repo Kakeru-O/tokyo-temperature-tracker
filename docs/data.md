@@ -51,6 +51,7 @@ data/raw/jma_tokyo_1976-2000.csv
 data/raw/jma_tokyo_2001-2025.csv
 data/raw/jma_tokyo_20260101-0530.csv
 data/raw/jma_tokyo_20260601-0630.csv
+data/raw/jma_tokyo_20260701-0731.csv
 ```
 
 `data/processed/` にも同じ単位の整形済みCSVがあります。
