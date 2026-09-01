@@ -11,7 +11,7 @@
 
 import marimo
 
-__generated_with = "0.23.9"
+__generated_with = "0.24.0"
 app = marimo.App(width="full")
 
 
@@ -350,6 +350,7 @@ def _(
     SERIES_COLORS,
     alt,
     filtered_annual,
+    filtered_daily,
     mo,
     pl,
     target_controls,
@@ -429,10 +430,23 @@ def _(
     summer_mean = filtered_annual["summer_mean_temp_c"].mean()
     extreme_days = filtered_annual["extreme_hot_days"].mean()
 
+    latest_observed_date = filtered_daily.filter(
+        pl.col("year") == target_end
+    )["observed_date"].max()
+    data_period_note = ""
+    if latest_observed_date is not None and (
+        latest_observed_date.month != 12 or latest_observed_date.day != 31
+    ):
+        data_period_note = (
+            f"> **注:** {target_end}年のデータは"
+            f"{latest_observed_date.month}月{latest_observed_date.day}日までです。"
+        )
+
     title = mo.md("# 東京の暑さの変化を追う")
     overview_header = mo.md(
         f"""
         対象期間 `{target_start}` 年から `{target_end}` 年までの `{year_count}` 年分を、年別推移、選択年の詳細、ランキング、期間比較で確認します。
+        {data_period_note}
 
         - 期間平均気温: `{annual_mean:.2f}℃`
         - 6-8月平均気温: `{summer_mean:.2f}℃`
