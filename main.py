@@ -56,6 +56,12 @@ def _():
         "夏日の期間": "#2ca02c",
         "真夏日の期間": "#d62728",
     }
+    HEAT_CATEGORY_COLORS = {
+        "夏日": "#d6a400",
+        "真夏日": "#e36f21",
+        "猛暑日": "#d83a34",
+        "熱帯夜": "#7b4ab8",
+    }
 
     def period_slice(df, y0, y1):
         start_year = min(y0, y1)
@@ -151,6 +157,7 @@ def _():
         load_metrics = analysis.load_metrics
         period_slice = analysis.period_slice
     return (
+        HEAT_CATEGORY_COLORS,
         SERIES_COLORS,
         alt,
         build_metric_table,
@@ -380,11 +387,7 @@ def _(
         clear="dblclick",
     )
 
-    x_domain = (
-        [target_start - 1, target_end + 1]
-        if target_start == target_end
-        else [target_start, target_end + 1]
-    )
+    x_domain = [target_start - 1, target_end + 1]
 
     annual_chart = (
         alt.Chart(annual_long)
@@ -642,6 +645,7 @@ def _(mo):
 
 @app.cell
 def _(
+    HEAT_CATEGORY_COLORS,
     alt,
     day_of_year_to_month_day,
     filtered_annual,
@@ -654,7 +658,7 @@ def _(
 ):
     category_specs = {
         "夏日": {
-            "color": "#d6a400",
+            "color": HEAT_CATEGORY_COLORS["夏日"],
             "end_color": "#7f6b1f",
             "count": "summer_days",
             "first": "first_summer_dayofyear",
@@ -662,7 +666,7 @@ def _(
             "span": "summer_day_span",
         },
         "真夏日": {
-            "color": "#e36f21",
+            "color": HEAT_CATEGORY_COLORS["真夏日"],
             "end_color": "#9f4f1a",
             "count": "midsummer_days",
             "first": "first_midsummer_dayofyear",
@@ -670,7 +674,7 @@ def _(
             "span": "midsummer_day_span",
         },
         "猛暑日": {
-            "color": "#d83a34",
+            "color": HEAT_CATEGORY_COLORS["猛暑日"],
             "end_color": "#8f1f2b",
             "count": "extreme_hot_days",
             "first": "first_extreme_hot_dayofyear",
@@ -678,7 +682,7 @@ def _(
             "span": "extreme_hot_span",
         },
         "熱帯夜": {
-            "color": "#7b4ab8",
+            "color": HEAT_CATEGORY_COLORS["熱帯夜"],
             "end_color": "#4d3b8f",
             "count": "tropical_nights",
             "first": "first_tropical_night_dayofyear",
@@ -841,12 +845,23 @@ def _(
     timing_trend = trend.filter(pl.col("chart_group") == "時期")
     timing_domain = [spec["label"] for spec in ranking_specs if spec["chart_group"] == "時期"]
     timing_range = [category_spec["color"], category_spec["end_color"]]
+    ranking_x_scale = alt.Scale(
+        domain=[
+            int(filtered_annual["year"].min()) - 1,
+            int(filtered_annual["year"].max()) + 1,
+        ]
+    )
 
     count_line = (
         alt.Chart(day_trend)
         .mark_line(color=category_spec["color"], opacity=0.82)
         .encode(
-            x=alt.X("year:Q", title="年", axis=alt.Axis(format="d")),
+            x=alt.X(
+                "year:Q",
+                title="年",
+                axis=alt.Axis(format="d"),
+                scale=ranking_x_scale,
+            ),
             y=alt.Y("value:Q", title="日数"),
             strokeDash=alt.StrokeDash(
                 "line_style:N",
@@ -859,7 +874,12 @@ def _(
         alt.Chart(day_trend)
         .mark_point(color=category_spec["color"], filled=True)
         .encode(
-            x=alt.X("year:Q", title="年", axis=alt.Axis(format="d")),
+            x=alt.X(
+                "year:Q",
+                title="年",
+                axis=alt.Axis(format="d"),
+                scale=ranking_x_scale,
+            ),
             y=alt.Y("value:Q", title="日数"),
             shape=alt.Shape(
                 "line_style:N",
@@ -889,7 +909,12 @@ def _(
         alt.Chart(timing_trend)
         .mark_line(opacity=0.78)
         .encode(
-            x=alt.X("year:Q", title="年", axis=alt.Axis(format="d")),
+            x=alt.X(
+                "year:Q",
+                title="年",
+                axis=alt.Axis(format="d"),
+                scale=ranking_x_scale,
+            ),
             y=alt.Y("value:Q", title="通算日", scale=alt.Scale(zero=False, reverse=True)),
             color=alt.Color(
                 "series:N",
@@ -907,7 +932,12 @@ def _(
         alt.Chart(timing_trend)
         .mark_point(filled=True)
         .encode(
-            x=alt.X("year:Q", title="年", axis=alt.Axis(format="d")),
+            x=alt.X(
+                "year:Q",
+                title="年",
+                axis=alt.Axis(format="d"),
+                scale=ranking_x_scale,
+            ),
             y=alt.Y("value:Q", title="通算日", scale=alt.Scale(zero=False, reverse=True)),
             color=alt.Color(
                 "series:N",
@@ -1182,6 +1212,191 @@ def _(
         gap=2,
     )
     compare_panel
+    return
+
+
+@app.cell
+def _(daily, mo):
+    available_months = sorted(set(int(month) for month in daily["month"].to_list()))
+    month_options = [f"{month}月" for month in available_months]
+    default_month = "8月" if 8 in available_months else month_options[-1]
+    monthly_comparison_month = mo.ui.dropdown(
+        month_options,
+        value=default_month,
+        label="比較する月",
+    )
+    return (monthly_comparison_month,)
+
+
+@app.cell
+def _(
+    HEAT_CATEGORY_COLORS,
+    alt,
+    daily,
+    mo,
+    monthly_comparison_month,
+    pl,
+    target_end,
+    target_start,
+):
+    selected_month = int(monthly_comparison_month.value.removesuffix("月"))
+    selected_month_daily = daily.filter(pl.col("month") == selected_month)
+
+    monthly_by_year = (
+        selected_month_daily.group_by("year")
+        .agg(
+            pl.col("avg_temp_c").mean().alias("平均気温"),
+            pl.col("max_temp_c").mean().alias("平均最高気温"),
+            pl.col("min_temp_c").mean().alias("平均最低気温"),
+            (pl.col("max_temp_c") >= 25).sum().alias("夏日数"),
+            (pl.col("max_temp_c") >= 30).sum().alias("真夏日数"),
+            (pl.col("max_temp_c") >= 35).sum().alias("猛暑日数"),
+            (pl.col("min_temp_c") >= 25).sum().alias("熱帯夜数"),
+        )
+        .sort("year")
+    )
+    monthly_target = monthly_by_year.filter(
+        pl.col("year").is_between(target_start, target_end)
+    )
+    temperature_metrics = ["平均気温", "平均最高気温", "平均最低気温"]
+    day_metrics = ["夏日数", "真夏日数", "猛暑日数", "熱帯夜数"]
+
+    temperature_long = monthly_target.unpivot(
+        index=["year"],
+        on=temperature_metrics,
+        variable_name="指標",
+        value_name="値",
+    )
+    day_long = monthly_target.unpivot(
+        index=["year"],
+        on=day_metrics,
+        variable_name="指標",
+        value_name="値",
+    )
+    temperature_normal = pl.DataFrame(
+        {
+            "指標": temperature_metrics,
+            "期間平均": [monthly_target[metric].mean() for metric in temperature_metrics],
+        }
+    )
+    day_normal = pl.DataFrame(
+        {
+            "指標": day_metrics,
+            "期間平均": [monthly_target[metric].mean() for metric in day_metrics],
+        }
+    )
+
+    temperature_colors = ["#e36f21", "#d83a34", "#2f6f8f"]
+    day_colors = [
+        HEAT_CATEGORY_COLORS["夏日"],
+        HEAT_CATEGORY_COLORS["真夏日"],
+        HEAT_CATEGORY_COLORS["猛暑日"],
+        HEAT_CATEGORY_COLORS["熱帯夜"],
+    ]
+    x_scale = alt.Scale(domain=[target_start - 1, target_end + 1])
+
+    temperature_lines = (
+        alt.Chart(temperature_long)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("year:Q", title="年", axis=alt.Axis(format="d"), scale=x_scale),
+            y=alt.Y("値:Q", title="気温(℃)", scale=alt.Scale(zero=False)),
+            color=alt.Color(
+                "指標:N",
+                title="指標",
+                scale=alt.Scale(domain=temperature_metrics, range=temperature_colors),
+            ),
+            tooltip=[
+                alt.Tooltip("year:Q", title="年", format="d"),
+                alt.Tooltip("指標:N", title="指標"),
+                alt.Tooltip("値:Q", title="気温(℃)", format=".1f"),
+            ],
+        )
+    )
+    temperature_normal_lines = (
+        alt.Chart(temperature_normal)
+        .mark_rule(strokeDash=[6, 4], opacity=0.75)
+        .encode(
+            y=alt.Y("期間平均:Q"),
+            color=alt.Color(
+                "指標:N",
+                scale=alt.Scale(domain=temperature_metrics, range=temperature_colors),
+                legend=None,
+            ),
+            tooltip=[
+                alt.Tooltip("指標:N", title="指標"),
+                alt.Tooltip("期間平均:Q", title="対象期間平均", format=".1f"),
+            ],
+        )
+    )
+    monthly_temperature_chart = (
+        (temperature_lines + temperature_normal_lines)
+        .resolve_scale(color="independent")
+        .properties(
+            title=f"{selected_month}月の気温比較（破線は対象期間平均）",
+            width="container",
+            height=300,
+        )
+    )
+
+    day_lines = (
+        alt.Chart(day_long)
+        .mark_line(point=True)
+        .encode(
+            x=alt.X("year:Q", title="年", axis=alt.Axis(format="d"), scale=x_scale),
+            y=alt.Y("値:Q", title="日数"),
+            color=alt.Color(
+                "指標:N",
+                title="指標",
+                scale=alt.Scale(domain=day_metrics, range=day_colors),
+            ),
+            tooltip=[
+                alt.Tooltip("year:Q", title="年", format="d"),
+                alt.Tooltip("指標:N", title="指標"),
+                alt.Tooltip("値:Q", title="日数", format=".0f"),
+            ],
+        )
+    )
+    day_normal_lines = (
+        alt.Chart(day_normal)
+        .mark_rule(strokeDash=[6, 4], opacity=0.85)
+        .encode(
+            y=alt.Y("期間平均:Q"),
+            color=alt.Color(
+                "指標:N",
+                scale=alt.Scale(domain=day_metrics, range=day_colors),
+                legend=None,
+            ),
+            tooltip=[
+                alt.Tooltip("指標:N", title="指標"),
+                alt.Tooltip("期間平均:Q", title="対象期間平均", format=".1f"),
+            ],
+        )
+    )
+    monthly_day_chart = (
+        (day_lines + day_normal_lines)
+        .resolve_scale(color="independent")
+        .properties(
+            title=f"{selected_month}月の夏日・真夏日・猛暑日・熱帯夜数（破線は対象期間平均）",
+            width="container",
+            height=300,
+        )
+    )
+
+    monthly_comparison_panel = mo.vstack(
+        [
+            mo.md("## 月別比較"),
+            mo.md(
+                "冒頭で選択した対象期間について、指定した月だけを年ごとに比較します。"
+                "破線は対象期間に含まれる全ての年の平均です。"
+            ),
+            monthly_comparison_month,
+            mo.ui.altair_chart(monthly_temperature_chart),
+            mo.ui.altair_chart(monthly_day_chart),
+        ],
+        gap=2,
+    )
+    monthly_comparison_panel
     return
 
 
